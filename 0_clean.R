@@ -2,15 +2,16 @@
 
 # Setting the ambience
 
-setwd("C:/Users/gabri/Documents/Github/teste")
+setwd("C:/Users/gabri/Documents/Github/health_exams_reminders")
 
 # Common used packages
 library(data.table)
 library(skimr)
+library()
 
 # Opening dataset
 dt <- fread(
-  "data/propria.txt",
+  "data/raw/raw_data_exams.txt",
   sep = "|",
   header = FALSE
 )
@@ -30,39 +31,48 @@ setnames(
   )
 )
 
-# Droping duplicates
-nrow(dt[duplicated(dt), ])
-dt_duplicatet <- dt[duplicated(dt), ]
+# Creating provisory number of exams
+dt_c <- dt[, n_exam := seq_len(.N), by = .(cns, diagendou)] # REMOVER DEPOIS
 
-nrow(dt[duplicated(dt), ]) / nrow(dt) # 82% da base são dados duplicados
-
-dt_c <- dt[!duplicated(dt), ]
-
-# Creating variables
-## dummies
-dt_c[, homem := fcase(genero == "MASCULINO", 1L,
-                      genero == "FEMININO", 0L,
-                      default = NA_integer_)]
-
-dt_c[, dias_espera := diaserafeito - diagendou]
-
-dt_c[, compareceu := fcase(situacao == "Realizou", 1L,
-                           situacao == "Faltou", 0L,
-                           default = NA_integer_)]
-## number of faltas
-dt_c[, .(n_faltas = sum(compareceu)), by = cns][order(-n_faltas)]
-dt_c[, .(n_obs = .N), by = cns][order(-n_obs)]
-
-dt_c[, n_faltas := sum(compareceu), by = cns]
-dt_c[, n_obs := .N, by = cns]
-dt_c[, perc_faltas := n_faltas / n_obs]
-
-# Removing variables
+# Deidentifing
+dt_c[, pacient_id := as.character(as.integer(factor(cns)))]
 dt_c[, nome := NULL]
-dt_c[, genero := NULL]
-dt_c[, situacao := NULL]
+dt_c[, cns := NULL]
+dt_c[, exam_id := as.character(.I)]
 
-# Sum stats
-skim(dt_c)
+# Droping duplicates
+dt_duplicatet <- dt_c[duplicated(dt_c), ]
+dt_c <- dt_c[!duplicated(dt_c), ]
+
+# Tidying
+## pacient level
+dt_p <- dt_c[, .(pacient_id, raca, genero)]
+dt_p <- dt_p[!duplicated(dt_p), ]
+
+## exam level
+dt_e <- dt_c[, .(exam_id, n_exam, pacient_id, situacao, unidade, diagendou, diaserafeito)]
+
+# For pacient-level dataset
+labelled::var_label(dt_p) <- list(
+  pacient_id = "Anonymized patient ID",
+  raca       = "Race",
+  genero     = "Gender"
+)
+
+# For exam-level dataset
+labelled::var_label(dt_e) <- list(
+  exam_id        = "Unique exam ID",
+  n_exam         = "Exam name",
+  pacient_id     = "Anonymized patient ID",
+  situacao       = "Exam status",
+  unidade        = "Health unit name",
+  diagendou      = "Date when exam was scheduled",
+  diaserafeito   = "Date when exam was performed"
+)
+
+# Removing other datasets
+rm(dt, dt_c, dt_duplicatet)
 
 # Saving clean dataset
+saveRDS(dt_p, "data/intermediary/clean_data_pacient.rds")
+saveRDS(dt_e, "data/intermediary/clean_data_exam.rds")
