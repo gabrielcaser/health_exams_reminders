@@ -1,21 +1,5 @@
 # This program cleans the dataset
 
-# TODO
-## criar IDs mesclando os nomes
-
-# Setting the ambience
-rm(list = ls())     # Remove todos objetos
-graphics.off()      # Fecha todas as janelas gráficas
-cat("\014")         # Limpa console (RStudio)
-gc()                # Garbage collection (libera memória)
-
-setwd("C:/Users/gabri/Documents/Github/health_exams_reminders")
-
-# Common used packages
-library(data.table)
-library(skimr)
-library(labelled)
-
 # Opening dataset
 dt <- fread(
   "data/raw/raw_data_exams.txt",
@@ -46,7 +30,8 @@ dt_c <- dt_c[, pacient_id := as.character(as.integer(factor(cns)))]
 dt_c <- dt_c[, nome := NULL]
 dt_c <- dt_c[, cns := NULL]
 dt_c <- dt_c[order(diagendou, n_exam)]
-dt_c <- dt_c[, pde_id := pacient_id]
+dt_c <- dt_c[, pd_id := paste0(pacient_id,"|",as.character(diagendou))]
+dt_c <- dt_c[, pde_id := paste0(pacient_id,"|",as.character(diagendou),"|",n_exam)]
 
 # Droping duplicates
 dt_duplicatet <- dt_c[duplicated(dt_c), ]
@@ -59,8 +44,8 @@ dt_p <- dt_c[, .(pacient_id, raca, genero)]
 dt_p <- dt_p[!duplicated(dt_p), ]
 
 ## pacient-day-exam level
-dt_pde <- dt_c[, .(pde_id, n_exam, pacient_id, situacao, unidade, diagendou, diaserafeito)]
-setcolorder(dt_pde, c("pde_id", "pacient_id", "diagendou", "n_exam"))
+dt_pde <- dt_c[, .(pde_id, pd_id, n_exam, pacient_id, situacao, unidade, diagendou, diaserafeito)]
+setcolorder(dt_pde, c("pde_id", "pd_id", "pacient_id", "diagendou", "n_exam"))
 
 # Changing types
 dt_pde[, unidade := factor(unidade)]
@@ -78,7 +63,8 @@ var_label(dt_p) <- list(
 
 # For exam-level dataset
 var_label(dt_pde) <- list(
-  pde_id         = "Unique patient-day-exam ID",
+  pde_id         = "Unique patient|day|exam ID",
+  pd_id          = "Unique patient|day ID",
   n_exam         = "Exam name",
   pacient_id     = "Anonymized patient ID",
   situacao       = "Exam status",
