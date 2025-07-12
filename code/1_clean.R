@@ -46,7 +46,7 @@ dt_c <- dt_c[, pacient_id := as.character(as.integer(factor(cns)))]
 dt_c <- dt_c[, nome := NULL]
 dt_c <- dt_c[, cns := NULL]
 dt_c <- dt_c[order(diagendou, n_exam)]
-dt_c <- dt_c[, pde_id := as.character(.I)]
+dt_c <- dt_c[, pde_id := pacient_id]
 
 # Droping duplicates
 dt_duplicatet <- dt_c[duplicated(dt_c), ]
