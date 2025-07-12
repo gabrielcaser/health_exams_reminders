@@ -10,14 +10,16 @@ rm(list = ls())     # Remove todos objetos
 graphics.off()      # Fecha todas as janelas gráficas
 cat("\014")         # Limpa console (RStudio)
 gc()                # Garbage collection (libera memória)
-
+set.seed(1235)
 setwd("C:/Users/gabri/Documents/Github/health_exams_reminders")
 
 # Common used packages
-library(data.table)
-library(skimr)
-library(labelled)
-
+library(data.table) # Data management
+library(skimr)      # Sum stats
+library(labelled)   # Create labels for data
+library(pROC)       # ROC curves (ML)
 
 # Running
 source("code/1_clean.R")
+source("code/2_construct.R")
+source("code/3_training_model.R")
