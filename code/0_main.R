@@ -2,6 +2,7 @@
 
 # This program cleans the dataset
 
+
 # TODO
 ## criar IDs mesclando os nomes
 
@@ -18,8 +19,11 @@ library(data.table) # Data management
 library(skimr)      # Sum stats
 library(labelled)   # Create labels for data
 library(pROC)       # ROC curves (ML)
+library(ggplot2)    # Visualizations
+library(lubridate)  # Date management
+library(dplyr)      # Data manipulation
 
 # Running
-source("code/1_clean.R")
-source("code/2_construct.R")
-source("code/3_training_model.R")
+#source("code/1_clean.R")
+#source("code/2_construct.R")
+#source("code/3_training_model.R")
