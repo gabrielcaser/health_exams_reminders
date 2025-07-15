@@ -29,6 +29,17 @@ dt_pde %>%
   theme_minimal() +
   theme(panel.grid = element_blank(), axis.text.x = element_blank())
 
+## Dias de espera por unidade
+dt_pde %>%
+  group_by(unidade) %>%
+  summarise(media_dias_espera = mean(dias_espera, na.rm = TRUE)) %>%
+  ggplot(aes(x = reorder(unidade, media_dias_espera), y = media_dias_espera)) +
+  geom_bar(stat = "identity", fill = "orange") +
+  geom_text(aes(label = round(media_dias_espera, 1)), hjust = -0.1) +
+  labs(title = "Média de Dias de Espera por Unidade", x = "Unidade", y = "Média de Dias de Espera") +
+  coord_flip() +
+  theme_minimal() +
+  theme(panel.grid = element_blank(), axis.text.x = element_blank())
 
 ## Porcentagem de comparecimento por mês
 dt_pde %>%
@@ -139,14 +150,3 @@ dt_pde %>%
   theme_minimal() +
   theme(panel.grid = element_blank())
 
-## Dias de espera por unidade
-dt_pde %>%
-  group_by(unidade) %>%
-  summarise(media_dias_espera = mean(dias_espera, na.rm = TRUE)) %>%
-  ggplot(aes(x = reorder(unidade, media_dias_espera), y = media_dias_espera)) +
-  geom_bar(stat = "identity", fill = "orange") +
-  geom_text(aes(label = round(media_dias_espera, 1)), hjust = -0.1) +
-  labs(title = "Média de Dias de Espera por Unidade", x = "Unidade", y = "Média de Dias de Espera") +
-  coord_flip() +
-  theme_minimal() +
-  theme(panel.grid = element_blank(), axis.text.x = element_blank())

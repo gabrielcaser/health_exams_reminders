@@ -37,6 +37,9 @@ dt_c <- dt_c[, pde_id := paste0(pacient_id,"|",as.character(diagendou),"|",n_exa
 dt_duplicatet <- dt_c[duplicated(dt_c), ]
 dt_c <- dt_c[!duplicated(dt_c), ]
 
+# Removing  unidade IOSE because records are not right
+dt_c <- dt_c[unidade != "IOSE"]
+
 # Tidying
 
 ## pacient level
@@ -51,6 +54,7 @@ setcolorder(dt_pde, c("pde_id", "pd_id", "pacient_id", "diagendou", "n_exam"))
 dt_pde[, unidade := factor(unidade)]
 dt_pde[, diagendou := as.Date(diagendou, format = "%d/%m/%Y")]
 dt_pde[, diaserafeito := as.Date(diaserafeito, format = "%d/%m/%Y")]
+
 
 # Labeling
 
