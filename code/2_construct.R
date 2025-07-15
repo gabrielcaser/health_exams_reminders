@@ -12,11 +12,25 @@ dt_p <- dt_p[, homem := fcase(genero == "MASCULINO", 1L,
 dt_pde <- dt_pde[, dias_espera := as.integer(diaserafeito - diagendou)]
 
 dt_pde <- dt_pde[, dia_feito_semana := format(as.Date(diaserafeito), "%a")]
+
+dt_pde[, dia_feito_semana := case_when(
+  dia_feito_semana == "seg" ~ "Mon",
+  dia_feito_semana == "ter" ~ "Tue",
+  dia_feito_semana == "qua" ~ "Wed",
+  dia_feito_semana == "qui" ~ "Thu",
+  dia_feito_semana == "sex" ~ "Fri",
+  dia_feito_semana == "sab" ~ "Sat",
+  dia_feito_semana == "dom" ~ "Sun",
+  TRUE ~ NA_character_
+)]
+
+
 dt_pde <- dt_pde[, dia_feito_semana := factor(
   dia_feito_semana,
-  levels = c("seg", "ter", "qua", "qui", "sex", "sáb", "dom"),
-  ordered = TRUE
+  levels = c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"),
+  ordered = FALSE
 )]
+
 
 dt_pde <- dt_pde[, compareceu := fcase(situacao == "Realizou", 1L,
                            situacao == "Faltou", 0L,
@@ -41,6 +55,8 @@ dt_pd <- dt_pde[, .(
 ), by = .(pacient_id, diagendou)][order(diagendou)]
 
 dt_pd <- dt_pd[, mean_compareceu := n_compareceu / n_exames]
+
+dt_pd <- dt_pd[, compareceu_dummy := ifelse(mean_compareceu > 0, 1, 0)]
 
 dt_pd <- dt_pd[, pd_id := paste0(pacient_id,"|",as.character(diagendou))]
 
@@ -99,6 +115,6 @@ dt_a <- merge(dt_pd, dt_p, by = "pacient_id", all = TRUE)
 saveRDS(dt_a, "data/final/analysis_data_pacient-day.rds")
 
 # Testing
-summary(lm(mean_compareceu ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca, data = dt_a))
+summary(lm(mean_compareceu ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + diagendou, data = dt_a))
 ## dias de espera não estão afetando muito a probabilidade da pessoa faltar (tempo de espera médio de 4 dias)
 ## O grande causador de faltas é a unidade de IOSE (81% de chance da pessoa faltar ao exame)

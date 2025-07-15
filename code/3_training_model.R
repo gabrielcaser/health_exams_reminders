@@ -4,7 +4,7 @@ rm(list = ls())
 dt  <- as.data.table(readRDS("data/final/analysis_data_pacient-day.rds"))
 
 # Preparação dos dados para ML -------------------------------------------
-dt[, compareceu_dummy := ifelse(mean_compareceu > 0, 1, 0)]
+
 
 # Dividir em treino e teste
 
