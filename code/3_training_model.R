@@ -1,3 +1,4 @@
+set.seed(1234)
 # Opening dataset
 rm(list = ls()) 
 dt  <- as.data.table(readRDS("data/final/analysis_data_pacient-day.rds"))
@@ -11,11 +12,32 @@ idx <- sample(1:nrow(dt), size = round(0.7 * nrow(dt)))
 training <- dt[idx, ]
 test <- dt[-idx, ]
 
+# Função de custo customizada: penaliza FP com peso 1.5
+custom_cost <- function(sens, spec) {
+  FNR <- 1 - sens
+  FPR <- 1 - spec
+  cost <- FNR * 1 + FPR * 1.3
+  return(cost)
+}
+
+# Função auxiliar para obter melhor threshold com penalização customizada
+obter_melhor_threshold <- function(roc_obj) {
+  coords_custom <- coords(
+    roc_obj,
+    x = "all",
+    ret = c("threshold", "sensitivity", "specificity"),
+    transpose = FALSE
+  )
+  coords_custom$cost <- with(coords_custom, custom_cost(sensitivity, specificity))
+  best_thresh <- coords_custom$threshold[which.min(coords_custom$cost)]
+  return(best_thresh)
+}
+
 # Modelo 1: Regressão Logística -------------------------------------------
 
 # Ajustar modelo com controle de convergência
 logreg <- glm(
-  compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca,
+  compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + diagendou,
   data = training,
   family = binomial,
   control = list(maxit = 100)
@@ -26,7 +48,8 @@ prob_logreg <- predict(logreg, newdata = test, type = "response") # THAT'S THE P
 
 # Melhor threshold
 roc_logreg <- roc(test$compareceu_dummy, prob_logreg)
-best_threshold_logreg <- as.numeric(coords(roc_logreg, "best", ret = "threshold"))
+best_threshold_logreg <- obter_melhor_threshold(roc_logreg)
+
 
 y_hat_logreg <- factor(ifelse(prob_logreg >= best_threshold_logreg, 1, 0))
 acc_logreg <- mean(y_hat_logreg == test$compareceu_dummy, na.rm = TRUE)
@@ -38,7 +61,7 @@ cat("AUC:", round(auc_logreg, 3), "\n")
 # Modelo 2: Árvore de Decisão --------------------------------------------
 ctree <-
   tree::tree(
-    compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca,
+    compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + diagendou,
     data = training,
     na.action = na.exclude
   )
@@ -46,7 +69,8 @@ ctree <-
 prob_ctree <- predict(ctree, newdata = test, type = "vector")
 
 roc_ctree <- roc(test$compareceu_dummy, prob_ctree)
-best_threshold_ctree <- as.numeric(coords(roc_ctree, "best", ret = "threshold"))
+best_threshold_ctree <- obter_melhor_threshold(roc_ctree)
+
 
 y_hat_ctree <- factor(ifelse(prob_ctree >= best_threshold_ctree, 1, 0))
 acc_ctree <- mean(y_hat_ctree == test$compareceu_dummy, na.rm = TRUE)
@@ -59,17 +83,18 @@ cat("AUC:", round(auc_ctree, 3), "\n")
 # Modelo 3: Random Forest -------------------------------------------------
 
 rf <- randomForest::randomForest(
-  compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca,
+  compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + diagendou,
   data = training,
   na.action = na.exclude,
-  ntree = 200,
+  ntree = 50,
   importance = TRUE
 )
 
 prob_rf <- predict(rf, newdata = test) # Probabilidade "Sim"
 
 roc_rf <- roc(test$compareceu_dummy, prob_rf)
-best_threshold_rf <- as.numeric(coords(roc_rf, "best", ret = "threshold"))
+best_threshold_rf <- obter_melhor_threshold(roc_rf)
+
 
 y_hat_rf <- factor(ifelse(prob_rf >= best_threshold_rf, 1, 0))
 acc_rf <- mean(y_hat_rf == test$compareceu_dummy, na.rm = TRUE)
@@ -85,7 +110,7 @@ print(head(importance_data, 5))
 
 # Modelo 4: Boosting ------------------------------------------------------
 # Variáveis explicativas
-vars <- c("homem", "mean_dias_espera", "n_exames", "mode_dia_semana", "mode_unidade", "raca")
+vars <- c("homem", "mean_dias_espera", "n_exames", "mode_dia_semana", "mode_unidade", "raca", "diagendou")
 
 # Criar matriz de preditores com dummies
 X_train <- model.matrix(~ . - 1, data = training[, ..vars])
@@ -112,7 +137,10 @@ prob_boosting <- predict(boosting, newdata = test_matrix)
 
 # Calcular AUC e threshold ótimo
 roc_boosting <- roc(y_test, prob_boosting)
-best_threshold_boosting <- as.numeric(coords(roc_boosting, "best", ret = "threshold"))
+# Obter melhor threshold com penalização customizada
+best_threshold_boosting <- obter_melhor_threshold(roc_boosting)
+
+print(paste("Melhor threshold penalizando FP:", round(best_threshold_boosting, 3)))
 
 # Classificação binária
 y_hat_boosting <- factor(
@@ -191,13 +219,13 @@ cat("\nMatriz de Confusão do Melhor Modelo (",
     melhor_modelo,
     "):\n")
 if (melhor_modelo == "Random Forest") {
-  print(table(Predição = y_hat_rf, Real = test$compareceu_dummy))
+  print(addmargins(table(Predição = y_hat_rf, Real = test$compareceu_dummy)))
 } else if (melhor_modelo == "Boosting") {
-  print(table(Predição = y_hat_boosting, Real = test$compareceu_dummy))
+  print(addmargins(table(Predição = y_hat_boosting, Real = test$compareceu_dummy)))
 } else if (melhor_modelo == "Regressão Logística") {
-  print(table(Predição = y_hat_logreg, Real = test$compareceu_dummy))
+  print(addmargins(table(Predição = y_hat_logreg, Real = test$compareceu_dummy)))
 } else {
-  print(table(Predição = y_hat_ctree, Real = test$compareceu_dummy))
+  print(addmargins(table(Predição = y_hat_ctree, Real = test$compareceu_dummy)))
 }
 
 # Relatório final
