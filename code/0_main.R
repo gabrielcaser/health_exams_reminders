@@ -12,7 +12,11 @@ graphics.off()      # Fecha todas as janelas gráficas
 cat("\014")         # Limpa console (RStudio)
 gc()                # Garbage collection (libera memória)
 set.seed(1235)
-setwd("C:/Users/gabri/Documents/Github/health_exams_reminders")
+
+# Paths
+setwd("C:/Users/gabri/Documents/Github/Personal/health_exams_reminders")
+
+data_path <- "C:/Users/gabri/OneDrive/Gabriel/Gov_Back/propria/data"
 
 # Common used packages
 library(data.table) # Data management

@@ -2,7 +2,7 @@
 
 # Opening dataset
 dt <- fread(
-  "data/raw/raw_data_exams.txt",
+  paste0(data_path,"/raw/raw_data_exams_2020_2025.txt"),
   sep = "|",
   header = FALSE
 )
@@ -11,30 +11,33 @@ dt <- fread(
 setnames(
   dt,
   c(
-    "situacao",
-    "raca",
-    "genero",
     "cns",
     "nome",
+    "idade",
+    "situacao",
+    "municipio",
+    "bairro",
+    "raca",
+    "genero",
     "diagendou",
     "diaserafeito",
-    "unidade"
+    "unidade",
+    "procedimento"
   )
 )
 
-# Creating provisory number of exams
-dt_c <- dt[, n_exam := seq_len(.N), by = .(cns, diagendou)] # REMOVER DEPOIS
 
 # Deidentifing
+dt_c <- copy(dt)
 dt_c <- dt_c[, pacient_id := as.character(as.integer(factor(cns)))]
 dt_c <- dt_c[, nome := NULL]
 dt_c <- dt_c[, cns := NULL]
-dt_c <- dt_c[order(diagendou, n_exam)]
+dt_c <- dt_c[order(diagendou, procedimento)]
 dt_c <- dt_c[, pd_id := paste0(pacient_id,"|",as.character(diagendou))]
-dt_c <- dt_c[, pde_id := paste0(pacient_id,"|",as.character(diagendou),"|",n_exam)]
+dt_c <- dt_c[, pde_id := paste0(pacient_id,"|",as.character(diagendou),"|",procedimento)]
 
 # Droping duplicates
-dt_duplicatet <- dt_c[duplicated(dt_c), ]
+dt_duplicated <- dt_c[duplicated(dt_c), ]
 dt_c <- dt_c[!duplicated(dt_c), ]
 
 # Removing  unidade IOSE because records are not right
@@ -43,11 +46,11 @@ dt_c <- dt_c[unidade != "IOSE"]
 # Tidying
 
 ## pacient level
-dt_p <- dt_c[, .(pacient_id, raca, genero)]
+dt_p <- dt_c[, .(pacient_id, raca, genero, idade)]
 dt_p <- dt_p[!duplicated(dt_p), ]
 
 ## pacient-day-exam level
-dt_pde <- dt_c[, .(pde_id, pd_id, n_exam, pacient_id, situacao, unidade, diagendou, diaserafeito)]
+dt_pde <- dt_c[, .(pde_id, pd_id, procedimento, pacient_id, situacao, unidade, bairro, diagendou, diaserafeito)]
 setcolorder(dt_pde, c("pde_id", "pd_id", "pacient_id", "diagendou", "n_exam"))
 
 # Changing types
