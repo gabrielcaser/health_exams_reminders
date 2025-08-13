@@ -5,8 +5,8 @@ dt_p   <- as.data.table(readRDS("data/intermediary/clean_data_pacient.rds"))
 dt_pde <- as.data.table(readRDS("data/intermediary/clean_data_pacient-day-exam.rds"))
 
 # Creating variables
-dt_p <- dt_p[, homem := fcase(genero == "MASCULINO", 1L,
-                              genero == "FEMININO", 0L,
+dt_p <- dt_p[, homem := fcase(genero == "M", 1L,
+                              genero == "F", 0L,
                               default = NA_integer_)]
 
 dt_pde <- dt_pde[, dias_espera := as.integer(diaserafeito - diagendou)]
@@ -32,7 +32,7 @@ dt_pde <- dt_pde[, dia_feito_semana := factor(
 )]
 
 
-dt_pde <- dt_pde[, compareceu := fcase(situacao == "Realizou", 1L,
+dt_pde <- dt_pde[, compareceu := fcase(situacao == "Não Faltou", 1L,
                            situacao == "Faltou", 0L,
                            default = NA_integer_)]
 
@@ -50,7 +50,8 @@ dt_pd <- dt_pde[, .(
   n_compareceu = sum(compareceu),
   mean_dias_espera = mean(dias_espera, na.rm = TRUE),
   mode_unidade = get_mode(unidade),
-  mode_dia_semana = get_mode(dia_feito_semana)
+  mode_dia_semana = get_mode(dia_feito_semana),
+  mode_procedimento = get_mode(procedimento)
   
 ), by = .(pacient_id, diagendou)][order(diagendou)]
 
@@ -94,12 +95,13 @@ var_label(dt_pd$mode_dia_semana)  <- "Most frequent day of the week when exams w
 setcolorder(dt_pde, c(
   "pde_id",
   "pacient_id",
-  "n_exam",
+  "procedimento",
   "diagendou",
   "diaserafeito",
   "dia_feito_semana",
   "dias_espera",
   "unidade",
+  "bairro",
   "compareceu"
 ))
 
@@ -115,6 +117,6 @@ dt_a <- merge(dt_pd, dt_p, by = "pacient_id", all = TRUE)
 saveRDS(dt_a, "data/final/analysis_data_pacient-day.rds")
 
 # Testing
-summary(lm(mean_compareceu ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + diagendou, data = dt_a))
+summary(lm(mean_compareceu ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + diagendou + mode_procedimento, data = dt_a))
 ## dias de espera não estão afetando muito a probabilidade da pessoa faltar (tempo de espera médio de 4 dias)
 ## O grande causador de faltas é a unidade de IOSE (81% de chance da pessoa faltar ao exame)

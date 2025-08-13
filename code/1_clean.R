@@ -1,5 +1,8 @@
 # This program cleans the dataset
 
+# TODO
+# - Clean Bairro variable
+
 # Opening dataset
 dt <- fread(
   paste0(data_path,"/raw/raw_data_exams_2020_2025.txt"),
@@ -45,19 +48,35 @@ dt_c <- dt_c[unidade != "IOSE"]
 
 # Tidying
 
+
 ## pacient level
 dt_p <- dt_c[, .(pacient_id, raca, genero, idade)]
 dt_p <- dt_p[!duplicated(dt_p), ]
 
 ## pacient-day-exam level
-dt_pde <- dt_c[, .(pde_id, pd_id, procedimento, pacient_id, situacao, unidade, bairro, diagendou, diaserafeito)]
-setcolorder(dt_pde, c("pde_id", "pd_id", "pacient_id", "diagendou", "n_exam"))
+dt_pde <- dt_c[, .(
+  pde_id,
+  pd_id,
+  procedimento,
+  pacient_id,
+  situacao,
+  unidade,
+  bairro,
+  diagendou,
+  diaserafeito
+)]
+
+setcolorder(dt_pde,
+            c("pde_id", "pd_id", "pacient_id", "diagendou", "procedimento"))
 
 # Changing types
 dt_pde[, unidade := factor(unidade)]
 dt_pde[, diagendou := as.Date(diagendou, format = "%d/%m/%Y")]
 dt_pde[, diaserafeito := as.Date(diaserafeito, format = "%d/%m/%Y")]
 
+
+# Geting idade (age) in years by keeping in the string only what comes before the word " years"
+dt_p[, age := as.integer(gsub(" years.*", "", idade))]
 
 # Labeling
 
@@ -72,16 +91,17 @@ var_label(dt_p) <- list(
 var_label(dt_pde) <- list(
   pde_id         = "Unique patient|day|exam ID",
   pd_id          = "Unique patient|day ID",
-  n_exam         = "Exam name",
+  procedimento   = "Exam name",
   pacient_id     = "Anonymized patient ID",
   situacao       = "Exam status",
   unidade        = "Health unit scheduled",
   diagendou      = "Date when exam was scheduled",
-  diaserafeito   = "Date when exam was performed"
+  diaserafeito   = "Date when exam was performed",
+  bairro         = "Neighborhood where exam was scheduled"
 )
 
 # Removing other datasets
-rm(dt, dt_c, dt_duplicatet)
+rm(dt, dt_c, dt_duplicated)
 
 # Saving clean dataset
 saveRDS(dt_p,   "data/intermediary/clean_data_pacient.rds")

@@ -2,7 +2,7 @@
 
 # Abrir o conjunto de dados
 dt_pde <- as.data.table(readRDS("data/intermediary/constructed_data_pacient-day-exam.rds"))
-
+dt_a   <- as.data.table(readRDS("data/final/analysis_data_pacient-day.rds"))
 # Geração de gráficos
 
 ## Total de exames por unidade preenchendo compareceu
@@ -25,6 +25,18 @@ dt_pde %>%
   geom_bar(stat = "identity", fill = "steelblue") +
   geom_text(aes(label = round(pct_compareceu, 2)), hjust = -0.1) +
   labs(title = "Porcentagem de Comparecimento por Unidade", x = "Unidade", y = "Comparecimento (%)") +
+  coord_flip() +
+  theme_minimal() +
+  theme(panel.grid = element_blank(), axis.text.x = element_blank())
+
+## Porcentagem de comparecimento por raca
+dt_a %>%
+  group_by(raca) %>%
+  summarise(pct_compareceu = mean(mean_compareceu, na.rm = TRUE) * 100) %>%
+  ggplot(aes(x = reorder(raca, -pct_compareceu), y = pct_compareceu)) +
+  geom_bar(stat = "identity", fill = "lightblue") +
+  geom_text(aes(label = round(pct_compareceu, 2)), hjust = -0.1) +
+  labs(title = "Porcentagem de Comparecimento por Raça", x = "Raça", y = "Comparecimento (%)") +
   coord_flip() +
   theme_minimal() +
   theme(panel.grid = element_blank(), axis.text.x = element_blank())

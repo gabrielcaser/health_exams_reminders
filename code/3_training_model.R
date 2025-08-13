@@ -5,6 +5,8 @@ dt  <- as.data.table(readRDS("data/final/analysis_data_pacient-day.rds"))
 
 # Preparação dos dados para ML -------------------------------------------
 
+# Dropando casos em que age é missing
+dt <- dt[!is.na(age), ]
 
 # Dividir em treino e teste
 
@@ -37,7 +39,7 @@ obter_melhor_threshold <- function(roc_obj) {
 
 # Ajustar modelo com controle de convergência
 logreg <- glm(
-  compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + diagendou,
+  compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + diagendou + age,
   data = training,
   family = binomial,
   control = list(maxit = 100)
@@ -61,7 +63,7 @@ cat("AUC:", round(auc_logreg, 3), "\n")
 # Modelo 2: Árvore de Decisão --------------------------------------------
 ctree <-
   tree::tree(
-    compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + diagendou,
+    compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + diagendou + age,
     data = training,
     na.action = na.exclude
   )
@@ -83,7 +85,7 @@ cat("AUC:", round(auc_ctree, 3), "\n")
 # Modelo 3: Random Forest -------------------------------------------------
 
 rf <- randomForest::randomForest(
-  compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + diagendou,
+  compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + diagendou + age,
   data = training,
   na.action = na.exclude,
   ntree = 50,
@@ -110,7 +112,7 @@ print(head(importance_data, 5))
 
 # Modelo 4: Boosting ------------------------------------------------------
 # Variáveis explicativas
-vars <- c("homem", "mean_dias_espera", "n_exames", "mode_dia_semana", "mode_unidade", "raca", "diagendou")
+vars <- c("homem", "mean_dias_espera", "n_exames", "mode_dia_semana", "mode_unidade", "raca", "diagendou", "age")
 
 # Criar matriz de preditores com dummies
 X_train <- model.matrix(~ . - 1, data = training[, ..vars])
