@@ -26,9 +26,11 @@ library(pROC)       # ROC curves (ML)
 library(ggplot2)    # Visualizations
 library(lubridate)  # Date management
 library(dplyr)      # Data manipulation
+library(stringi)
+library(stringdist)
 
 # Running
-#source("code/1_clean.R")
-#source("code/2_construct.R")
+source("code/1_clean.R")
+source("code/2_construct.R")
 source("code/3_training_model.R")
 #source("code/4_visualizations.R")
