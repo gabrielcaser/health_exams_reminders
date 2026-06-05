@@ -8,8 +8,13 @@ dt  <- as.data.table(readRDS("data/final/analysis_data_pacient-day.rds"))
 # Dropando casos em que age é missing
 dt <- dt[!is.na(age), ]
 
-# Dividir em treino e teste
+# Criando age^2 e features de mês/ano derivadas da data de agendamento
+# age^2 captura efeito não-linear da idade; mês/ano generalizam melhor do que a data bruta
+dt[, age2            := age^2]
+dt[, mes_agendamento := month(diagendou)]
+dt[, ano_agendamento := year(diagendou)]
 
+# Dividir em treino e teste
 idx <- sample(1:nrow(dt), size = round(0.7 * nrow(dt)))
 training <- dt[idx, ]
 test <- dt[-idx, ]
@@ -39,7 +44,7 @@ obter_melhor_threshold <- function(roc_obj) {
 
 # Ajustar modelo com controle de convergência
 logreg <- glm(
-  compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + diagendou + age + mode_procedimento + mode_bairro,
+  compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + mes_agendamento + ano_agendamento + age + age2 + mode_procedimento + mode_bairro,
   data = training,
   family = binomial,
   control = list(maxit = 100)
@@ -63,7 +68,7 @@ cat("AUC:", round(auc_logreg, 3), "\n")
 # Modelo 2: Árvore de Decisão --------------------------------------------
 ctree <-
   tree::tree(
-    compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + diagendou + age + mode_procedimento + mode_bairro,
+    compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + mes_agendamento + ano_agendamento + age + age2 + mode_procedimento + mode_bairro,
     data = training,
     na.action = na.exclude
   )
@@ -83,16 +88,19 @@ cat("AUC:", round(auc_ctree, 3), "\n")
 
 
 # Modelo 3: Random Forest -------------------------------------------------
+# ranger é ~10x mais rápido que randomForest: usa C++ e paralelização nativa
 
-rf <- randomForest::randomForest(
-  compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + diagendou + age + mode_procedimento + mode_bairro,
-  data = training,
-  na.action = na.exclude,
-  ntree = 50,
-  importance = TRUE
+rf <- ranger::ranger(
+  factor(compareceu_dummy) ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + mes_agendamento + ano_agendamento + age + age2 + mode_procedimento + mode_bairro,
+  data        = training,
+  num.trees   = 300,
+  importance  = "impurity",
+  probability = TRUE,
+  num.threads = parallel::detectCores() - 1
 )
 
-prob_rf <- predict(rf, newdata = test) # Probabilidade "Sim"
+# $predictions retorna matriz de probabilidades; [, "1"] = prob de compareceu = 1
+prob_rf <- predict(rf, data = test)$predictions[, "1"]
 
 roc_rf <- roc(test$compareceu_dummy, prob_rf)
 best_threshold_rf <- obter_melhor_threshold(roc_rf)
@@ -105,14 +113,14 @@ auc_rf <- auc(roc_rf)
 cat("Acurácia:", round(acc_rf * 100, 2), "%\n")
 cat("AUC:", round(auc_rf, 3), "\n")
 
-# Mostrar importância das variáveis
+# Mostrar importância das variáveis (Gini impurity)
 cat("Top 5 variáveis mais importantes:\n")
-importance_data <- randomForest::importance(rf)[order(-randomForest::importance(rf)[, 2]), , drop = FALSE]
+importance_data <- sort(rf$variable.importance, decreasing = TRUE)
 print(head(importance_data, 5))
 
 # Modelo 4: Boosting ------------------------------------------------------
 # Variáveis explicativas
-vars <- c("homem", "mean_dias_espera", "n_exames", "mode_dia_semana", "mode_unidade", "raca", "diagendou", "age", "mode_procedimento", "mode_bairro")
+vars <- c("homem", "mean_dias_espera", "n_exames", "mode_dia_semana", "mode_unidade", "raca", "mes_agendamento", "ano_agendamento", "age", "age2", "mode_procedimento", "mode_bairro")
 
 # Criar matriz de preditores com dummies
 X_train <- model.matrix(~ . - 1, data = training[, ..vars])
@@ -126,12 +134,15 @@ y_test  <- test$compareceu_dummy
 train_matrix <- xgboost::xgb.DMatrix(data = X_train, label = y_train)
 test_matrix  <- xgboost::xgb.DMatrix(data = X_test, label = y_test)
 
-# Treinar o modelo XGBoost
-boosting <- xgboost::xgboost(
-  data = train_matrix,
-  objective = "binary:logistic",
-  nrounds = 50,
-  verbose = 0
+# Treinar o modelo XGBoost com early stopping: para quando o erro no eval não melhora por 30 rounds
+# xgb.train() é a função correta ao usar watchlist — objective fica dentro de params
+boosting <- xgboost::xgb.train(
+  params                = list(objective = "binary:logistic"),
+  data                  = train_matrix,
+  nrounds               = 500,
+  watchlist             = list(train = train_matrix, eval = test_matrix),
+  early_stopping_rounds = 30,
+  verbose               = 0
 )
 
 # Prever probabilidades no conjunto de teste
