@@ -9,21 +9,55 @@ dt  <- as.data.table(readRDS("data/final/analysis_data_pacient-day.rds"))
 dt <- dt[!is.na(age), ]
 
 # Criando age^2 e features de mês/ano derivadas da data de agendamento
-# age^2 captura efeito não-linear da idade; mês/ano generalizam melhor do que a data bruta
 dt[, age2            := age^2]
 dt[, mes_agendamento := month(diagendou)]
 dt[, ano_agendamento := year(diagendou)]
+
+# Estação do ano (hemisfério sul)
+dt[, estacao := fcase(
+  mes_agendamento %in% c(12L, 1L, 2L), "verao",
+  mes_agendamento %in% c(3L, 4L, 5L),  "outono",
+  mes_agendamento %in% c(6L, 7L, 8L),  "inverno",
+  default = "primavera"
+)]
+
+# Faixas de tempo de espera (relação com falta pode ser não-linear)
+dt[, faixa_espera := fcase(
+  mean_dias_espera <= 7,  "curta",
+  mean_dias_espera <= 30, "media",
+  default = "longa"
+)]
+
+# Ordenar por pacient_id e data — obrigatório para os lags ficarem cronologicamente corretos
+dt <- dt[order(pacient_id, diagendou)]
+
+# Histórico acumulado de comparecimento (shift exclui a observação atual)
+dt[, comparecimentos_previos    := shift(cumsum(compareceu_dummy),  fill = 0), by = pacient_id]
+dt[, prop_comparecimento_previo := shift(cummean(compareceu_dummy), fill = 0), by = pacient_id]
+
+# Flag: primeira consulta do paciente no sistema (sem histórico disponível)
+dt[, primeira_vez := as.integer(comparecimentos_previos == 0L)]
+
+# Taxa de comparecimento nas últimas 3 visitas (comportamento recente pesa mais que o histórico total)
+# Criamos 3 lags e tiramos a média — mais robusto que frollapply em grupos pequenos
+dt[, lag1 := shift(compareceu_dummy, 1L, fill = NA), by = pacient_id]
+dt[, lag2 := shift(compareceu_dummy, 2L, fill = NA), by = pacient_id]
+dt[, lag3 := shift(compareceu_dummy, 3L, fill = NA), by = pacient_id]
+dt[, prop_recente := rowMeans(cbind(lag1, lag2, lag3), na.rm = TRUE)]
+dt[, c("lag1", "lag2", "lag3") := NULL]
+# rowMeans retorna NaN quando todas as 3 são NA (primeira visita): substitui pelo histórico acumulado
+dt[is.nan(prop_recente), prop_recente := prop_comparecimento_previo]
 
 # Dividir em treino e teste
 idx <- sample(1:nrow(dt), size = round(0.7 * nrow(dt)))
 training <- dt[idx, ]
 test <- dt[-idx, ]
 
-# Função de custo customizada: penaliza FP com peso 1.5
+# Função de custo customizada: penaliza FP com o dobro do peso
 custom_cost <- function(sens, spec) {
   FNR <- 1 - sens
   FPR <- 1 - spec
-  cost <- FNR * 1 + FPR * 1.3
+  cost <- FNR * 1 + FPR * 2
   return(cost)
 }
 
@@ -40,11 +74,11 @@ obter_melhor_threshold <- function(roc_obj) {
   return(best_thresh)
 }
 
-# Modelo 1: Regressão Logística -------------------------------------------
+# Anchor Modelo 1: Regressão Logística -------------------------------------------
 
 # Ajustar modelo com controle de convergência
 logreg <- glm(
-  compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + mes_agendamento + ano_agendamento + age + age2 + mode_procedimento + mode_bairro,
+  compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + mes_agendamento + ano_agendamento + age + age2 + mode_procedimento + mode_bairro + estacao + faixa_espera + comparecimentos_previos + prop_comparecimento_previo + primeira_vez + prop_recente,
   data = training,
   family = binomial,
   control = list(maxit = 100)
@@ -68,7 +102,7 @@ cat("AUC:", round(auc_logreg, 3), "\n")
 # Modelo 2: Árvore de Decisão --------------------------------------------
 ctree <-
   tree::tree(
-    compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + mes_agendamento + ano_agendamento + age + age2 + mode_procedimento + mode_bairro,
+    compareceu_dummy ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + mes_agendamento + ano_agendamento + age + age2 + mode_procedimento + mode_bairro + estacao + faixa_espera + comparecimentos_previos + prop_comparecimento_previo + primeira_vez + prop_recente,
     data = training,
     na.action = na.exclude
   )
@@ -91,7 +125,7 @@ cat("AUC:", round(auc_ctree, 3), "\n")
 # ranger é ~10x mais rápido que randomForest: usa C++ e paralelização nativa
 
 rf <- ranger::ranger(
-  factor(compareceu_dummy) ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + mes_agendamento + ano_agendamento + age + age2 + mode_procedimento + mode_bairro,
+  factor(compareceu_dummy) ~ homem + mean_dias_espera + n_exames + mode_dia_semana + mode_unidade + raca + mes_agendamento + ano_agendamento + age + age2 + mode_procedimento + mode_bairro + estacao + faixa_espera + comparecimentos_previos + prop_comparecimento_previo + primeira_vez + prop_recente,
   data        = training,
   num.trees   = 300,
   importance  = "impurity",
@@ -120,7 +154,7 @@ print(head(importance_data, 5))
 
 # Modelo 4: Boosting ------------------------------------------------------
 # Variáveis explicativas
-vars <- c("homem", "mean_dias_espera", "n_exames", "mode_dia_semana", "mode_unidade", "raca", "mes_agendamento", "ano_agendamento", "age", "age2", "mode_procedimento", "mode_bairro")
+vars <- c("homem", "mean_dias_espera", "n_exames", "mode_dia_semana", "mode_unidade", "raca", "mes_agendamento", "ano_agendamento", "age", "age2", "mode_procedimento", "mode_bairro", "estacao", "faixa_espera", "comparecimentos_previos", "prop_comparecimento_previo", "primeira_vez", "prop_recente")
 
 # Criar matriz de preditores com dummies
 X_train <- model.matrix(~ . - 1, data = training[, ..vars])
@@ -134,12 +168,21 @@ y_test  <- test$compareceu_dummy
 train_matrix <- xgboost::xgb.DMatrix(data = X_train, label = y_train)
 test_matrix  <- xgboost::xgb.DMatrix(data = X_test, label = y_test)
 
-# Treinar o modelo XGBoost com early stopping: para quando o erro no eval não melhora por 30 rounds
+# Treinar o modelo XGBoost com early stopping e hiperparâmetros tunados
 # xgb.train() é a função correta ao usar watchlist — objective fica dentro de params
+# eta baixo (0.05) = aprendizado mais cauteloso; max_depth=5 evita overfit;
+# subsample/colsample introduzem aleatoriedade que regulariza o modelo
 boosting <- xgboost::xgb.train(
-  params                = list(objective = "binary:logistic"),
+  params = list(
+    objective        = "binary:logistic",
+    eta              = 0.05,
+    max_depth        = 5,
+    subsample        = 0.8,
+    colsample_bytree = 0.8,
+    min_child_weight = 5
+  ),
   data                  = train_matrix,
-  nrounds               = 500,
+  nrounds               = 1000,
   watchlist             = list(train = train_matrix, eval = test_matrix),
   early_stopping_rounds = 30,
   verbose               = 0
@@ -225,6 +268,19 @@ cat("\n=== GERANDO CURVA ROC ===\n")
              prob_boosting,
              col = 4,
              add = TRUE)
+
+  legend(
+    "bottomright",
+    legend = c(
+      "Regressão Logística",
+      "Árvore de Decisão",
+      "Random Forest",
+      "Boosting"
+    ),
+    col = 1:4,
+    lwd = 2,
+    bty = "n"
+  )
 
 
 # Matriz de confusão do melhor modelo

@@ -1,8 +1,5 @@
 # This program cleans the dataset
 
-# TODO
-# - Clean Bairro variable
-
 # Opening dataset
 dt <- fread(
   paste0(data_path,"/raw/raw_data_exams_2020_2025.txt"),

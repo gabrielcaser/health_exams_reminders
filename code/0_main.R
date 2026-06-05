@@ -2,8 +2,6 @@
 
 # This program cleans the dataset
 
-
-# TODO
 ## criar IDs mesclando os nomes
 
 # Setting the ambience
